@@ -1,3 +1,5 @@
+////// [code review] File checked
+
 pragma solidity ^0.4.15;
 
 
@@ -12,6 +14,8 @@ import "zeppelin-solidity/contracts/ownership/Ownable.sol";
  * @dev Instead owner delegates rights to manage an contract to the different addresses and
  * @dev stay able to revoke permissions at any time.
  */
+
+// Ownable gives you 'onlyOwner' modifier that is used in Mangeable
 contract Manageable is Ownable {
 
   /* Storage */

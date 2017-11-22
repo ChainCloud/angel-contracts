@@ -1,3 +1,5 @@
+////// [code review] File checked
+
 pragma solidity ^0.4.15;
 
 
@@ -11,6 +13,8 @@ import "./AngelCentralBank.sol";
 /**
  * @title AngelToken
  */
+// NamedToken
+// Pausable -> Manageable -> Ownable
 contract AngelToken is StandardToken, NamedToken, Pausable {
 
   /* Events */
@@ -23,6 +27,7 @@ contract AngelToken is StandardToken, NamedToken, Pausable {
 
   /* Storage */
 
+  ////// [style] Use AngelCentralBank contract here instead?
   address public centralBankAddress;
   mapping (address => uint) spendingBlocksNumber;
 
@@ -44,6 +49,7 @@ contract AngelToken is StandardToken, NamedToken, Pausable {
 
     bool result = super.transfer(_to, _value);
     if (result == true && _to == centralBankAddress) {
+      // will call 'burn'
       AngelCentralBank(centralBankAddress).angelBurn(msg.sender, _value);
     }
     return result;
@@ -58,6 +64,7 @@ contract AngelToken is StandardToken, NamedToken, Pausable {
 
     bool result = super.transferFrom(_from, _to, _value);
     if (result == true && _to == centralBankAddress) {
+      // will call 'burn'
       AngelCentralBank(centralBankAddress).angelBurn(_from, _value);
     }
     return result;

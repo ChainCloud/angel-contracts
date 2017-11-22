@@ -1,3 +1,5 @@
+////// [code review] File checked
+
 pragma solidity ^0.4.15;
 
 
@@ -27,6 +29,7 @@ contract AngelCentralBank {
 
   uint public constant icoCap = 70000000 * (10 ** 18);
 
+  ////// [style] Use "1 ether"
   uint public initialTokenPrice = 1 * (10 ** 18) / (10 ** 4); // means 0.0001 ETH for one token
 
   uint public constant landmarkSize = 1000000 * (10 ** 18);
@@ -47,18 +50,25 @@ contract AngelCentralBank {
   uint public constant angelFoundationShareDenominator = 100;
 
   /* Storage - state */
-
   address public angelAdminAddress;
+
+  ////// [style] Use constant!
   address public angelFoundationAddress = address(0x2b0556a6298eA3D35E90F1df32cc126b31F59770);
+
+  ////// [style] Use constant!
   uint public icoLaunchTimestamp = 1511784000;  // November 27th 12:00 GMT
+  ////// [style] Use constant and remove icoFinishTimestamp=now;
   uint public icoFinishTimestamp = 1514376000;  // December 27th 12:00 GMT
+  ////// [style] Use constant!
   uint public firstRefundRoundFinishTimestamp = 1520424000;  // March 7th 2018 12:00 GMT
+  ////// [style] Use constant!
   uint public secondRefundRoundFinishTimestamp = 1524744000;  // April 26th 2018 12:00 GMT
 
 
   AngelToken public angelToken;
 
   mapping (address => InvestmentRecord[]) public investments; // investorAddress => list of investments
+  ////// [style] This can be removed. Use 'investments[msg.sender].length' instead
   mapping (address => bool) public investors;
   uint public totalInvestors = 0;
   uint public totalTokensSold = 0;
@@ -105,7 +115,11 @@ contract AngelCentralBank {
     // calculate amount of tokens for received ETH
     uint _purchasedTokensWei = 0;
     uint _notProcessedEthWei = 0;
+
+    // will throw if _purchasedTokensWei will be 0
     (_purchasedTokensWei, _notProcessedEthWei) = calculatePurchasedTokens(totalTokensSold, msg.value);
+
+    ////// [low] Who knows what function above returns (without looking in the code). What if _notProcessedEthWei>msg.value (by accident)
     uint _actualInvestment = (msg.value - _notProcessedEthWei);
 
     // create record for the investment
@@ -126,8 +140,14 @@ contract AngelCentralBank {
 
     // transfer tokens and ETH
     angelToken.mint(msg.sender, _purchasedTokensWei);
+
+    ////// [critical] I think that math is wrong here
+    ////// the logics should be: "2) Mints Angel Tokens for Angel Foundation at a rate of 3 Angel Token for each 10 Angel Tokens minted for the Investor"
+    ////// x * (30 / (100 - 30))
     angelToken.mint(angelFoundationAddress,
                     _purchasedTokensWei * angelFoundationShareNumerator / (angelFoundationShareDenominator - angelFoundationShareNumerator));
+
+    // 20%
     angelFoundationAddress.transfer(_actualInvestment * initialFundsReleaseNumerator / initialFundsReleaseDenominator);
     if (_notProcessedEthWei > 0) {
       msg.sender.transfer(_notProcessedEthWei);
@@ -164,7 +184,11 @@ contract AngelCentralBank {
     bool _isCapReached = false;
     do {
       // get landmark values
+      // ETH/tokens
+
+      // can not be less than initialTokenPrice
       _landmarkPrice = calculateLandmarkPrice(_totalTokensSoldBefore + _purchasedTokensWei);
+      // can be zero
       _maxLandmarkTokensWei = landmarkSize - ((_totalTokensSoldBefore + _purchasedTokensWei) % landmarkSize);
       if (_totalTokensSoldBefore + _purchasedTokensWei + _maxLandmarkTokensWei >= icoCap) {
         _maxLandmarkTokensWei = icoCap - _totalTokensSoldBefore - _purchasedTokensWei;
@@ -236,6 +260,8 @@ contract AngelCentralBank {
 
       // persist changes to the storage
       _refundedEthWei += _recordRefundedEthWei;
+
+      // _recordTokensWeiToProcess can't be bigger...
       _notProcessedTokensWei -= _recordTokensWeiToProcess;
 
       investments[_investor][_recordID].refundedEthWei += _recordRefundedEthWei;
@@ -258,7 +284,12 @@ contract AngelCentralBank {
 
     // transfer ETH and remaining tokens
     angelToken.burn(_returnedTokensWei - _notProcessedTokensWei);
+
+    ////// [low] question: how is it possible that _notProcessedTokensWei will be non ZERO?
+    ////// the transfers were locked, so we couldn't transfer tokens from investor A to investor B...
+    ////// i think that logics should be removed
     if (_notProcessedTokensWei > 0) {
+      ////// [low] (paused==true) -> will throw.
       angelToken.transfer(_investor, _notProcessedTokensWei);
     }
     _investor.transfer(_refundedEthWeiWithDiscount);
@@ -278,9 +309,11 @@ contract AngelCentralBank {
     constant returns (uint)
   {
     if (now <= firstRefundRoundFinishTimestamp) {
+      // 80%
       return (_refundedEthWei * firstRefundRoundRateNumerator / firstRefundRoundRateDenominator);
     }
     else {
+      // 40%
       return (_refundedEthWei * secondRefundRoundRateNumerator / secondRefundRoundRateDenominator);
     }
   }
@@ -350,16 +383,18 @@ contract AngelCentralBank {
 
 
   /* Lifecycle */
-
   function unpauseAngelToken() {
     require(now >= icoFinishTimestamp);
     require(angelTokenUnpaused == false);
 
     angelTokenUnpaused = true;
 
+    // will enable transfers
     angelToken.unpauseContract();
   }
 
+  ////// [low] If you lost your keys -> Funds will be forever locked
+  ////// [low] Better allow anyone to call this method (with conditions)
   function withdrawFoundationFunds() {
     require(msg.sender == angelFoundationAddress || msg.sender == angelAdminAddress);
     require(now > firstRefundRoundFinishTimestamp);
@@ -368,8 +403,12 @@ contract AngelCentralBank {
       require(firstRefundRoundFundsWithdrawal == false);
 
       firstRefundRoundFundsWithdrawal = true;
+      
+      // 50% of current funds
       angelFoundationAddress.transfer(this.balance * afterFirstRefundRoundFundsReleaseNumerator / afterFirstRefundRoundFundsReleaseDenominator);
     } else {
+      // now > secondRefundRoundFinishTimestamp
+      // 100% of current funds
       angelFoundationAddress.transfer(this.balance);
     }
   }
